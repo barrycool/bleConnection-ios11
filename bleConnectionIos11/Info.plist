@@ -24,6 +24,8 @@
 	<true/>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>configure wifi by BLE</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>configure wifi by BLE</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

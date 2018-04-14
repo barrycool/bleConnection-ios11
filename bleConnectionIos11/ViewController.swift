@@ -10,6 +10,7 @@ import UIKit
 import SystemConfiguration
 import SystemConfiguration.CaptiveNetwork
 import CoreBluetooth
+import CoreLocation
 
 class ViewController: UIViewController, CBCentralManagerDelegate, CBPeripheralDelegate, CBPeripheralManagerDelegate  {
 
@@ -29,19 +30,19 @@ class ViewController: UIViewController, CBCentralManagerDelegate, CBPeripheralDe
     struct Msg: Codable {
         var SSID: String
         var Passwd: String
-        //var CustomInfo: String
+        var CustomInfo: String
     }
     
     var packet = Data()
+    var sendIndex: Int = 0
+    
+    var broadcastTimer: Timer!
     
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do any additional setup after loading the view, typically from a nib.
         TFSSID.text = getssid()
-        //TFPasswd.text = "yangliujiezou"
-        TFPasswd.text = "123456789"
-        
-        //self.BLEPeri.delegate = self
+        TFPasswd.text = "12345678"
         
         self.BLECM = CBCentralManager(delegate: self, queue: nil)
         self.BLEPM = CBPeripheralManager(delegate: self, queue: nil)
@@ -56,33 +57,23 @@ class ViewController: UIViewController, CBCentralManagerDelegate, CBPeripheralDe
 
     @IBAction func startOnclick() {
         if BTStart.currentTitle!.hasPrefix("start") {
-            BTStart.setTitle("stop", for: .normal)
-            
-            if isP2P.selectedSegmentIndex == 0 {
-                makeMsg()
-                startBle(true)
-            }
-            else {
-                let alertContrl = UIAlertController(title: "sorry", message: "broadcat not implemented", preferredStyle: UIAlertControllerStyle.alert)
-                 alertContrl.addAction(UIAlertAction(title: "OK", style: UIAlertActionStyle.default, handler: nil))
-                 present(alertContrl, animated: true, completion: nil)
-                
-                 BTStart.setTitle("start", for: .normal)
-                
-                /*
-                self.BLEPM.startAdvertising([CBAdvertisementDataLocalNameKey: "barry", CBAdvertisementDataServiceUUIDsKey: [CBUUID(string: "FFE0"), CBUUID(string: "FFE1")]])*/
-            }
+            makeMsg()
+            startBle(true)
         }
         else {
             startBle(false)
-            if self.BLEPM.isAdvertising {
-                self.BLEPM.stopAdvertising()
-            }
         }
     }
     
+    @objc func startBroadcast() {
+        if self.BLEPM.isAdvertising {
+            self.BLEPM.stopAdvertising()
+        }
+        advertiseDevice(region: createBeaconRegion()!)
+    }
+    
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        print(central.description)
+        print(central.state)
     }
     
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi RSSI: NSNumber) {
@@ -90,7 +81,6 @@ class ViewController: UIViewController, CBCentralManagerDelegate, CBPeripheralDe
         print(peripheral.name ?? "")
         print(peripheral.identifier.uuidString)
         
-        //if (peripheral.name ?? "" == "mtkaudio" ) {
         if peripheral.name ?? "" == "mtkaudio" {
             self.BLECM.stopScan()
             
@@ -197,6 +187,20 @@ class ViewController: UIViewController, CBCentralManagerDelegate, CBPeripheralDe
         TFPasswd.resignFirstResponder()
     }
     
+    func createBeaconRegion() -> CLBeaconRegion? {
+        let (proximityUUID, major, minor) = getBroadcastData()
+        let beaconID = ""
+        
+        return CLBeaconRegion(proximityUUID: UUID(uuidString: proximityUUID.uuidString)!,
+                              major: major, minor: minor, identifier: beaconID)
+    }
+    
+    func advertiseDevice(region : CLBeaconRegion) {
+        let peripheralData = region.peripheralData(withMeasuredPower: nil)
+        
+        self.BLEPM.startAdvertising(((peripheralData as NSDictionary) as! [String : Any]))
+    }
+    
     func simpleEncrypt(_ plainText: Data) -> Data {
         var cipherText = Data()
         
@@ -226,32 +230,38 @@ class ViewController: UIViewController, CBCentralManagerDelegate, CBPeripheralDe
     }
     
     func makeMsg() {
-        //let msg = Msg(SSID: TFSSID.text!, Passwd: TFPasswd.text!, CustomInfo: TFCustomInfo.text!)
-        let msg = Msg(SSID: TFSSID.text!, Passwd: TFPasswd.text!)
-        //let encoder = JSONEncoder()
-        //encoder.outputFormatting = .prettyPrinted
+        let msg = Msg(SSID: TFSSID.text!, Passwd: TFPasswd.text!, CustomInfo: TFCustomInfo.text!)
         
         do {
             packet = try JSONEncoder().encode(msg)
-            //pading space
+            //pading space for align 4 bytes
             for _ in 1...(4 - packet.count % 4) {
                 packet.append(contentsOf: [0x20])
             }
-            print(String(data: packet, encoding: .utf8) ?? "")
-            
-            packet = simpleEncrypt(packet)
         }catch {
             
         }
+        
+        print(String(data: packet, encoding: .utf8) ?? "")
+        print(String(format: "%d", packet.count))
+        
+        packet = simpleEncrypt(packet)
     }
     
     func startBle(_ enable :Bool) {
         if enable {
             BTStart.setTitle("stop", for: .normal)
-            self.BLECM.scanForPeripherals(withServices: nil, options: nil)
+            
+            if isP2P.selectedSegmentIndex == 0 {
+                self.BLECM.scanForPeripherals(withServices: nil, options: nil)
+            }
+            else {
+                broadcastTimer = Timer.scheduledTimer(timeInterval: 0.5, target: self, selector: #selector(ViewController.startBroadcast), userInfo: nil, repeats: true)
+            }
         }
         else {
             BTStart.setTitle("start", for: .normal)
+            
             if self.BLECM.isScanning {
                 self.BLECM.stopScan()
             }
@@ -259,7 +269,44 @@ class ViewController: UIViewController, CBCentralManagerDelegate, CBPeripheralDe
             if self.BLEPeri != nil && self.BLEPeri.state == CBPeripheralState.connected {
                 self.BLECM.cancelPeripheralConnection(self.BLEPeri)
             }
+            
+            if broadcastTimer != nil && broadcastTimer.isValid {
+                broadcastTimer.invalidate()
+            }
+            
+            if self.BLEPM.isAdvertising {
+                self.BLEPM.stopAdvertising()
+            }
         }
+    }
+    
+    func getBroadcastData() -> (uuid: CBUUID, major: UInt16, major: UInt16) {
+        var subPacket = packet.subdata(in: Range(sendIndex * 19..<sendIndex * 19 + min(19, packet.count - sendIndex * 19)))
+        if (packet.count - sendIndex * 19 <= 19) {
+            subPacket.append(Data(count: 19 - (packet.count - sendIndex * 19)))
+        }
+        
+        var totalPacketNum = packet.count / 19
+        if (packet.count % 19) != 0 {
+            totalPacketNum += 1
+        }
+        var tmp = Data(count: 1)
+        tmp[0] = (UInt8(totalPacketNum) << 4) | UInt8(sendIndex)
+        subPacket = tmp + subPacket
+        
+        if (packet.count - sendIndex * 19 <= 19) {
+            sendIndex = 0
+        }
+        else {
+            sendIndex += 1
+        }
+        
+        let major: UInt16 = UInt16(subPacket[16]) | (UInt16(subPacket[17]) << 8)
+        let minjor: UInt16 = UInt16(subPacket[18]) | (UInt16(subPacket[19]) << 8)
+        
+        subPacket.removeLast(4)
+        
+        return (CBUUID(data: subPacket), major, minjor)
     }
     
     func getssid() -> String {
