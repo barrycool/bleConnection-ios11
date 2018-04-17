@@ -33,6 +33,8 @@ class ViewController: UIViewController, CBCentralManagerDelegate, CBPeripheralDe
         var CustomInfo: String
     }
     
+    let MAXPACKETLEN: Int = 18
+    
     var packet = Data()
     var sendIndex: Int = 0
     
@@ -41,7 +43,7 @@ class ViewController: UIViewController, CBCentralManagerDelegate, CBPeripheralDe
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do any additional setup after loading the view, typically from a nib.
-        TFSSID.text = getssid()
+        TFSSID.text = getSSID()
         TFPasswd.text = "12345678"
         
         self.BLECM = CBCentralManager(delegate: self, queue: nil)
@@ -191,6 +193,8 @@ class ViewController: UIViewController, CBCentralManagerDelegate, CBPeripheralDe
         let (proximityUUID, major, minor) = getBroadcastData()
         let beaconID = ""
         
+        print(proximityUUID.uuidString + String(format: " %04X %04X", major, minor))
+        
         return CLBeaconRegion(proximityUUID: UUID(uuidString: proximityUUID.uuidString)!,
                               major: major, minor: minor, identifier: beaconID)
     }
@@ -281,20 +285,22 @@ class ViewController: UIViewController, CBCentralManagerDelegate, CBPeripheralDe
     }
     
     func getBroadcastData() -> (uuid: CBUUID, major: UInt16, major: UInt16) {
-        var subPacket = packet.subdata(in: Range(sendIndex * 19..<sendIndex * 19 + min(19, packet.count - sendIndex * 19)))
-        if (packet.count - sendIndex * 19 <= 19) {
-            subPacket.append(Data(count: 19 - (packet.count - sendIndex * 19)))
+        var subPacket = packet.subdata(in: Range(sendIndex * MAXPACKETLEN..<sendIndex * MAXPACKETLEN + min(MAXPACKETLEN, packet.count - sendIndex * MAXPACKETLEN)))
+        if (packet.count - sendIndex * MAXPACKETLEN <= MAXPACKETLEN) {
+            subPacket.append(Data(count: MAXPACKETLEN - (packet.count - sendIndex * MAXPACKETLEN)))
         }
         
-        var totalPacketNum = packet.count / 19
-        if (packet.count % 19) != 0 {
+        var totalPacketNum = packet.count / MAXPACKETLEN
+        if (packet.count % MAXPACKETLEN) != 0 {
             totalPacketNum += 1
         }
-        var tmp = Data(count: 1)
-        tmp[0] = (UInt8(totalPacketNum) << 4) | UInt8(sendIndex)
+        
+        var tmp = Data(count: 2)
+        tmp[0] = (UInt8(totalPacketNum) << 4) | UInt8(sendIndex + 1)
+        tmp[1] = crc8.calcCrc8(subPacket)
         subPacket = tmp + subPacket
         
-        if (packet.count - sendIndex * 19 <= 19) {
+        if (packet.count - sendIndex * MAXPACKETLEN <= MAXPACKETLEN) {
             sendIndex = 0
         }
         else {
@@ -309,7 +315,7 @@ class ViewController: UIViewController, CBCentralManagerDelegate, CBPeripheralDe
         return (CBUUID(data: subPacket), major, minjor)
     }
     
-    func getssid() -> String {
+    func getSSID() -> String {
         let ifs = CNCopySupportedInterfaces()
         var SSID: String = ""
         if ifs != nil {
