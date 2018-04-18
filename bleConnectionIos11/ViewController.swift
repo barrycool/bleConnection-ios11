@@ -295,9 +295,11 @@ class ViewController: UIViewController, CBCentralManagerDelegate, CBPeripheralDe
             totalPacketNum += 1
         }
         
-        var tmp = Data(count: 2)
+        var tmp = Data(count: 1)
         tmp[0] = (UInt8(totalPacketNum) << 4) | UInt8(sendIndex + 1)
-        tmp[1] = crc8.calcCrc8(subPacket)
+        subPacket = tmp + subPacket
+        
+        tmp[0] = crc8.calcCrc8(subPacket)
         subPacket = tmp + subPacket
         
         if (packet.count - sendIndex * MAXPACKETLEN <= MAXPACKETLEN) {
