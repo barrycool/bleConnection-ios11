@@ -309,8 +309,8 @@ class ViewController: UIViewController, CBCentralManagerDelegate, CBPeripheralDe
             sendIndex += 1
         }
         
-        let major: UInt16 = UInt16(subPacket[16]) | (UInt16(subPacket[17]) << 8)
-        let minjor: UInt16 = UInt16(subPacket[18]) | (UInt16(subPacket[19]) << 8)
+        let major: UInt16 = UInt16(subPacket[17]) | (UInt16(subPacket[16]) << 8)
+        let minjor: UInt16 = UInt16(subPacket[19]) | (UInt16(subPacket[18]) << 8)
         
         subPacket.removeLast(4)
         
