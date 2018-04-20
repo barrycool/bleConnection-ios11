@@ -260,7 +260,7 @@ class ViewController: UIViewController, CBCentralManagerDelegate, CBPeripheralDe
                 self.BLECM.scanForPeripherals(withServices: nil, options: nil)
             }
             else {
-                broadcastTimer = Timer.scheduledTimer(timeInterval: 0.5, target: self, selector: #selector(ViewController.startBroadcast), userInfo: nil, repeats: true)
+                broadcastTimer = Timer.scheduledTimer(timeInterval: 0.2, target: self, selector: #selector(ViewController.startBroadcast), userInfo: nil, repeats: true)
             }
         }
         else {
